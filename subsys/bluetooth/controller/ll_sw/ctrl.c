@@ -11,11 +11,11 @@
 
 #include <soc.h>
 #include <device.h>
-#include <entropy.h>
-#include <clock_control.h>
+#include <drivers/entropy.h>
+#include <drivers/clock_control.h>
 #include <bluetooth/hci.h>
-#include <misc/util.h>
-#include <misc/byteorder.h>
+#include <sys/util.h>
+#include <sys/byteorder.h>
 
 #include "ll.h"
 #include "ll_feat.h"
@@ -962,6 +962,7 @@ static inline u32_t isr_rx_adv(u8_t devmatch_ok, u8_t devmatch_id,
 
 	if ((pdu_adv->type == PDU_ADV_TYPE_SCAN_REQ) &&
 	    (pdu_adv->len == sizeof(struct pdu_adv_scan_req)) &&
+	    (_pdu_adv->type != PDU_ADV_TYPE_DIRECT_IND) &&
 	    isr_adv_sr_check(_pdu_adv, pdu_adv, devmatch_ok, &rl_idx)) {
 
 #if defined(CONFIG_BT_CTLR_SCAN_REQ_NOTIFY)
@@ -1292,23 +1293,6 @@ static u32_t isr_rx_scan_report(u8_t rssi_ready, u8_t rl_idx, bool dir_report)
 	*extra = dir_report ? 1 : 0;
 	extra += PDU_AC_SIZE_SCFP;
 #endif /* CONFIG_BT_CTLR_EXT_SCAN_FP */
-#if defined(CONFIG_BT_HCI_MESH_EXT)
-	if (node_rx->hdr.type == NODE_RX_TYPE_MESH_REPORT) {
-		/* save the directed adv report flag */
-		*extra = _radio.scanner.chan - 1;
-		extra++;
-		sys_put_le32(_radio.ticks_anchor, extra);
-	}
-#endif /* CONFIG_BT_HCI_MESH_EXT */
-
-#if defined(CONFIG_BT_HCI_MESH_EXT)
-	if (node_rx->hdr.type == NODE_RX_TYPE_MESH_REPORT) {
-		/* save the directed adv report flag */
-		*extra = _radio.scanner.chan - 1;
-		extra++;
-		sys_put_le32(_radio.ticks_anchor, extra);
-	}
-#endif /* CONFIG_BT_HCI_MESH_EXT */
 
 #if defined(CONFIG_BT_HCI_MESH_EXT)
 	if (node_rx->hdr.type == NODE_RX_TYPE_MESH_REPORT) {
@@ -1514,7 +1498,7 @@ static inline u32_t isr_rx_scan(u8_t devmatch_ok, u8_t devmatch_id,
 		 * +/- half the 32KHz clock resolution. In order to achieve
 		 * a microsecond resolution, in the case of negative remainder,
 		 * the radio packet timer is started one 32KHz tick early,
-		 * hence substract one tick unit from the measurement of the
+		 * hence subtract one tick unit from the measurement of the
 		 * packet end.
 		 */
 		if (!_radio.remainder_anchor ||
@@ -3446,12 +3430,6 @@ static inline bool isr_rx_conn_enc_unexpected(struct connection *conn,
 		  (opcode != PDU_DATA_LLCTRL_TYPE_REJECT_EXT_IND)))) ||
 	       (conn->role &&
 		((!conn->refresh &&
-		  /* As a workaround to IOP with some old peer controllers that
-		   * respond with Unknown Rsp PDU to our local Slave Initiated
-		   * Feature request during Encryption Setup initiated by the
-		   * peer, we accept this Unknown Rsp PDU during the Encryption
-		   * setup procedure in progress.
-		   */
 		  (opcode != PDU_DATA_LLCTRL_TYPE_UNKNOWN_RSP) &&
 		  (opcode != PDU_DATA_LLCTRL_TYPE_TERMINATE_IND) &&
 		  (opcode != PDU_DATA_LLCTRL_TYPE_START_ENC_RSP) &&
@@ -5000,7 +4978,7 @@ static void k32src_wait(void)
 	done = true;
 
 	struct device *lf_clock = device_get_binding(
-		DT_NORDIC_NRF_CLOCK_0_LABEL "_32K");
+		DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_32K");
 
 	LL_ASSERT(lf_clock);
 
@@ -9199,6 +9177,26 @@ static void packet_tx_enqueue(u8_t max)
 				pdu_data_q_tx->handle);
 
 		if (conn->handle == pdu_data_q_tx->handle) {
+			if (IS_ENABLED(CONFIG_BT_CTLR_LLID_DATA_START_EMPTY)) {
+				struct pdu_data *p;
+
+				p = (void *)node_tx_new->pdu_data;
+				if ((p->ll_id == PDU_DATA_LLID_DATA_START) &&
+				    !p->len) {
+					conn->start_empty = 1U;
+					pdu_node_tx_release(conn->handle,
+							    node_tx_new);
+					goto packet_tx_enqueue_release;
+				} else if (p->len && conn->start_empty) {
+					conn->start_empty = 0U;
+					if (p->ll_id ==
+					    PDU_DATA_LLID_DATA_CONTINUE) {
+						p->ll_id =
+							PDU_DATA_LLID_DATA_START;
+					}
+				}
+			}
+
 			if (conn->pkt_tx_data == 0) {
 				conn->pkt_tx_data = node_tx_new;
 
@@ -9226,6 +9224,7 @@ static void packet_tx_enqueue(u8_t max)
 			pdu_node_tx_release(pdu_data_q_tx->handle, node_tx_new);
 		}
 
+packet_tx_enqueue_release:
 		first = _radio.packet_tx_first + 1;
 		if (first == _radio.packet_tx_count) {
 			first = 0U;
@@ -9518,7 +9517,7 @@ static void ctrl_tx_enqueue(struct connection *conn,
 		 * by peer, hence place this new ctrl after head
 		 */
 
-		/* if data transmited once, keep it at head of the tx list,
+		/* if data transmitted once, keep it at head of the tx list,
 		 * as we will insert a ctrl after it, hence advance the
 		 * data pointer
 		 */

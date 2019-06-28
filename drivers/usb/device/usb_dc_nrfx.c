@@ -19,7 +19,7 @@
 #include <kernel.h>
 #include <usb/usb_dc.h>
 #include <usb/usb_device.h>
-#include <clock_control.h>
+#include <drivers/clock_control.h>
 #include <hal/nrf_power.h>
 #include <drivers/clock_control/nrf_clock_control.h>
 #include <nrfx_usbd.h>
@@ -465,7 +465,7 @@ static inline struct usbd_event *usbd_evt_alloc(void)
 					       K_NO_WAIT);
 		if (ret < 0) {
 			/* This should never fail in a properly operating system. */
-			LOG_ERR("USBD event memory corrupted.");
+			LOG_ERR("USBD event memory corrupted");
 			__ASSERT_NO_MSG(0);
 			return NULL;
 		}
@@ -537,7 +537,7 @@ static int hf_clock_enable(bool on, bool blocking)
 	struct device *clock;
 	static bool clock_requested;
 
-	clock = device_get_binding(DT_NORDIC_NRF_CLOCK_0_LABEL "_16M");
+	clock = device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_16M");
 	if (!clock) {
 		LOG_ERR("NRF HF Clock device not found!");
 		return ret;
@@ -663,7 +663,7 @@ static int eps_ctx_init(void)
 			err = k_mem_pool_alloc(&ep_buf_pool, &ep_ctx->buf.block,
 					       MAX_EP_BUF_SZ, K_NO_WAIT);
 			if (err < 0) {
-				LOG_ERR("EP buffer alloc failed for EPIN%d", i);
+				LOG_ERR("Buffer alloc failed for EP 0x%02x", i);
 				return -ENOMEM;
 			}
 		}
@@ -679,7 +679,7 @@ static int eps_ctx_init(void)
 			err = k_mem_pool_alloc(&ep_buf_pool, &ep_ctx->buf.block,
 					       MAX_EP_BUF_SZ, K_NO_WAIT);
 			if (err < 0) {
-				LOG_ERR("EP buffer alloc failed for EPOUT%d", i);
+				LOG_ERR("Buffer alloc failed for EP 0x%02x", i);
 				return -ENOMEM;
 			}
 		}
@@ -883,7 +883,7 @@ static inline void usbd_work_process_recvreq(struct nrf_usbd_ctx *ctx,
 	nrfx_err_t err = nrfx_usbd_ep_transfer(
 		ep_addr_to_nrfx(ep_ctx->cfg.addr), &transfer);
 	if (err != NRFX_SUCCESS) {
-		LOG_ERR("nRF USBD transfer error (OUT): %d.", err);
+		LOG_ERR("nRF USBD transfer error (OUT): 0x%02x", err);
 	}
 	k_mutex_unlock(&ctx->drv_lock);
 }
@@ -956,8 +956,7 @@ static void usbd_event_transfer_ctrl(nrfx_usbd_evt_t const *const p_event)
 		break;
 
 		default: {
-			LOG_ERR(
-				"Unexpected event (nrfx_usbd): %d, ep %d",
+			LOG_ERR("Unexpected event (nrfx_usbd): %d, ep 0x%02x",
 				p_event->data.eptransfer.status,
 				p_event->data.eptransfer.ep);
 		}
@@ -1001,7 +1000,7 @@ static void usbd_event_transfer_ctrl(nrfx_usbd_evt_t const *const p_event)
 				p_event->data.eptransfer.ep, &ep_ctx->buf.len);
 
 			if (err_code != NRFX_USBD_EP_OK) {
-				LOG_ERR("_ep_status_get failed! Code: %d.",
+				LOG_ERR("_ep_status_get failed! Code: %d",
 					err_code);
 				__ASSERT_NO_MSG(0);
 			}
@@ -1020,7 +1019,7 @@ static void usbd_event_transfer_ctrl(nrfx_usbd_evt_t const *const p_event)
 		break;
 
 		default: {
-			LOG_ERR("Unexpected event from nrfx_usbd: %d, ep %d",
+			LOG_ERR("Unexpected event (nrfx_usbd): %d, ep 0x%02x",
 				p_event->data.eptransfer.status,
 				p_event->data.eptransfer.ep);
 		}
@@ -1043,7 +1042,7 @@ static void usbd_event_transfer_data(nrfx_usbd_evt_t const *const p_event)
 				return;
 			}
 
-			LOG_DBG("write complete, ep %d",
+			LOG_DBG("write complete, ep 0x%02x",
 				(u32_t)p_event->data.eptransfer.ep);
 
 			ep_ctx->write_in_progress = false;
@@ -1056,7 +1055,7 @@ static void usbd_event_transfer_data(nrfx_usbd_evt_t const *const p_event)
 		break;
 
 		default: {
-			LOG_ERR("Unexpected event from nrfx_usbd: %d, ep %d",
+			LOG_ERR("Unexpected event (nrfx_usbd): %d, ep 0x%02x",
 				p_event->data.eptransfer.status,
 				p_event->data.eptransfer.ep);
 		}
@@ -1072,7 +1071,7 @@ static void usbd_event_transfer_data(nrfx_usbd_evt_t const *const p_event)
 				return;
 			}
 
-			LOG_DBG("read request, ep %d",
+			LOG_DBG("read request, ep 0x%02x",
 				(u32_t)p_event->data.eptransfer.ep);
 
 			ep_ctx->read_pending = true;
@@ -1095,7 +1094,7 @@ static void usbd_event_transfer_data(nrfx_usbd_evt_t const *const p_event)
 			ep_ctx->buf.len = nrf_usbd_ep_amount_get(
 				p_event->data.eptransfer.ep);
 
-			LOG_DBG("read complete, ep %d, len %d",
+			LOG_DBG("read complete, ep 0x%02x, len %d",
 				(u32_t)p_event->data.eptransfer.ep,
 				ep_ctx->buf.len);
 
@@ -1109,7 +1108,7 @@ static void usbd_event_transfer_data(nrfx_usbd_evt_t const *const p_event)
 		break;
 
 		default: {
-			LOG_ERR("Unexpected event from nrfx_usbd: %d, ep %d",
+			LOG_ERR("Unexpected event (nrfx_usbd): %d, ep 0x%02x",
 				p_event->data.eptransfer.status,
 				p_event->data.eptransfer.ep);
 		}
@@ -1129,19 +1128,19 @@ static void usbd_event_handler(nrfx_usbd_evt_t const *const p_event)
 
 	switch (p_event->type) {
 	case NRFX_USBD_EVT_SUSPEND:
-		LOG_DBG("SUSPEND state detected.");
+		LOG_DBG("SUSPEND state detected");
 		evt.evt_type = USBD_EVT_POWER;
 		evt.evt.pwr_evt.state = USBD_SUSPENDED;
 		put_evt = true;
 		break;
 	case NRFX_USBD_EVT_RESUME:
-		LOG_DBG("RESUMING from suspend.");
+		LOG_DBG("RESUMING from suspend");
 		evt.evt_type = USBD_EVT_POWER;
 		evt.evt.pwr_evt.state = USBD_RESUMED;
 		put_evt = true;
 		break;
 	case NRFX_USBD_EVT_WUREQ:
-		LOG_DBG("RemoteWU initiated.");
+		LOG_DBG("RemoteWU initiated");
 		break;
 	case NRFX_USBD_EVT_RESET:
 		evt.evt_type = USBD_EVT_RESET;
@@ -1229,8 +1228,7 @@ static inline void usbd_reinit(void)
 	err = nrfx_usbd_init(usbd_event_handler);
 
 	if (err != NRFX_SUCCESS) {
-		LOG_DBG("nRF USBD driver reinit failed. Code: %d.",
-			(u32_t)err);
+		LOG_DBG("nRF USBD driver reinit failed. Code: %d", (u32_t)err);
 		__ASSERT_NO_MSG(0);
 	}
 }
@@ -1253,7 +1251,7 @@ static void usbd_work_handler(struct k_work *item)
 		switch (ev->evt_type) {
 		case USBD_EVT_EP:
 			if (!ctx->attached) {
-				LOG_ERR("EP %d event dropped (not attached).",
+				LOG_ERR("not attached, EP 0x%02x event dropped",
 					(u32_t)ev->evt.ep_evt.ep->cfg.addr);
 			}
 			usbd_work_process_ep_events(&ev->evt.ep_evt);
@@ -1262,7 +1260,7 @@ static void usbd_work_handler(struct k_work *item)
 			usbd_work_process_pwr_events(&ev->evt.pwr_evt);
 			break;
 		case USBD_EVT_RESET:
-			LOG_DBG("USBD reset event.");
+			LOG_DBG("USBD reset event");
 			k_mutex_lock(&ctx->drv_lock, K_FOREVER);
 			eps_ctx_init();
 			k_mutex_unlock(&ctx->drv_lock);
@@ -1277,13 +1275,16 @@ static void usbd_work_handler(struct k_work *item)
 			}
 			break;
 		case USBD_EVT_REINIT: {
-				/* Reinitialize the peripheral after queue overflow. */
+				/*
+				 * Reinitialize the peripheral after queue
+				 * overflow.
+				 */
 				LOG_ERR("USBD event queue full!");
 				usbd_reinit();
 				break;
 			}
 		default:
-			LOG_ERR("Unknown USBD event: %"PRId16".", ev->evt_type);
+			LOG_ERR("Unknown USBD event: %"PRId16, ev->evt_type);
 			break;
 		}
 		usbd_evt_free(ev);
@@ -1303,15 +1304,14 @@ int usb_dc_attach(void)
 	k_work_init(&ctx->usb_work, usbd_work_handler);
 	k_mutex_init(&ctx->drv_lock);
 
-	IRQ_CONNECT(DT_NORDIC_NRF_USBD_USBD_0_IRQ,
-		    DT_NORDIC_NRF_USBD_USBD_0_IRQ_PRIORITY,
+	IRQ_CONNECT(DT_NORDIC_NRF_USBD_USBD_0_IRQ_0,
+		    DT_NORDIC_NRF_USBD_USBD_0_IRQ_0_PRIORITY,
 		    nrfx_isr, nrfx_usbd_irq_handler, 0);
 
 	err = nrfx_usbd_init(usbd_event_handler);
 
 	if (err != NRFX_SUCCESS) {
-		LOG_DBG("nRF USBD driver init failed. Code: %d.",
-			(u32_t)err);
+		LOG_DBG("nRF USBD driver init failed. Code: %d", (u32_t)err);
 		return -EIO;
 	}
 	nrf5_power_usb_power_int_enable(true);
@@ -1367,7 +1367,7 @@ int usb_dc_reset(void)
 		return -ENODEV;
 	}
 
-	LOG_DBG("USBD Reset.");
+	LOG_DBG("USBD Reset");
 
 	ret = usb_dc_detach();
 	if (ret) {
@@ -1398,7 +1398,7 @@ int usb_dc_set_address(const u8_t addr)
 
 	ctx = get_usbd_ctx();
 
-	LOG_DBG("Address set to: %d.", addr);
+	LOG_DBG("Address set to: %d", addr);
 
 	return 0;
 }
@@ -1408,7 +1408,7 @@ int usb_dc_ep_check_cap(const struct usb_dc_ep_cfg_data *const ep_cfg)
 {
 	u8_t ep_idx = NRF_USBD_EP_NR_GET(ep_cfg->ep_addr);
 
-	LOG_DBG("ep %x, mps %d, type %d", ep_cfg->ep_addr, ep_cfg->ep_mps,
+	LOG_DBG("ep 0x%02x, mps %d, type %d", ep_cfg->ep_addr, ep_cfg->ep_mps,
 		ep_cfg->ep_type);
 
 	if ((ep_cfg->ep_type == USB_DC_EP_CONTROL) && ep_idx) {
@@ -1458,7 +1458,7 @@ int usb_dc_ep_configure(const struct usb_dc_ep_cfg_data *const ep_cfg)
 	ep_ctx->cfg.max_sz = ep_cfg->ep_mps;
 
 	if ((ep_cfg->ep_mps & (ep_cfg->ep_mps - 1)) != 0U) {
-		LOG_ERR("EP max packet size must be a power of 2.");
+		LOG_ERR("EP max packet size must be a power of 2");
 		return -EINVAL;
 	}
 	nrfx_usbd_ep_max_packet_size_set(ep_addr_to_nrfx(ep_cfg->ep_addr),
@@ -1489,14 +1489,14 @@ int usb_dc_ep_set_stall(const u8_t ep)
 		nrfx_usbd_ep_stall(ep_addr_to_nrfx(ep));
 		break;
 	case USB_DC_EP_ISOCHRONOUS:
-		LOG_ERR("STALL unsupported on ISO endpoint.s");
+		LOG_ERR("STALL unsupported on ISO endpoint");
 		return -EINVAL;
 	}
 
 	ep_ctx->buf.len = 0U;
 	ep_ctx->buf.curr = ep_ctx->buf.data;
 
-	LOG_DBG("STALL on EP %d.", ep);
+	LOG_DBG("STALL on EP 0x%02x", ep);
 
 	return 0;
 }
@@ -1516,7 +1516,7 @@ int usb_dc_ep_clear_stall(const u8_t ep)
 	}
 
 	nrfx_usbd_ep_stall_clear(ep_addr_to_nrfx(ep));
-	LOG_DBG("Unstall on EP %d", ep);
+	LOG_DBG("Unstall on EP 0x%02x", ep);
 
 	return 0;
 }
@@ -1561,7 +1561,7 @@ int usb_dc_ep_enable(const u8_t ep)
 		return -EALREADY;
 	}
 
-	LOG_DBG("EP enable: %d.", ep);
+	LOG_DBG("EP enable: 0x%02x", ep);
 
 	ep_ctx->cfg.en = true;
 
@@ -1590,7 +1590,7 @@ int usb_dc_ep_disable(const u8_t ep)
 		return -EALREADY;
 	}
 
-	LOG_DBG("EP disable: %d.", ep);
+	LOG_DBG("EP disable: 0x%02x", ep);
 
 	nrfx_usbd_ep_disable(ep_addr_to_nrfx(ep));
 	ep_ctx->cfg.en = false;
@@ -1622,7 +1622,7 @@ int usb_dc_ep_flush(const u8_t ep)
 int usb_dc_ep_write(const u8_t ep, const u8_t *const data,
 		    const u32_t data_len, u32_t *const ret_bytes)
 {
-	LOG_DBG("ep_write: ep %d, len %d", ep, data_len);
+	LOG_DBG("ep_write: ep 0x%02x, len %d", ep, data_len);
 	struct nrf_usbd_ctx *ctx = get_usbd_ctx();
 	struct nrf_usbd_ep_ctx *ep_ctx;
 	u32_t bytes_to_copy;
@@ -1640,6 +1640,10 @@ int usb_dc_ep_write(const u8_t ep, const u8_t *const data,
 		return -EINVAL;
 	}
 
+	if (!ep_ctx->cfg.en) {
+		LOG_ERR("Endpoint 0x%02x is not enabled", ep);
+		return -EINVAL;
+	}
 
 	k_mutex_lock(&ctx->drv_lock, K_FOREVER);
 
@@ -1692,7 +1696,7 @@ int usb_dc_ep_write(const u8_t ep, const u8_t *const data,
 	if (err != NRFX_SUCCESS) {
 		ep_ctx->write_in_progress = false;
 		result = -EIO;
-		LOG_ERR("nRF USBD write error: %d.", (u32_t)err);
+		LOG_ERR("nRF USBD write error: %d", (u32_t)err);
 	}
 
 	k_mutex_unlock(&ctx->drv_lock);
@@ -1720,6 +1724,11 @@ int usb_dc_ep_read_wait(u8_t ep, u8_t *data, u32_t max_data_len,
 
 	ep_ctx = endpoint_ctx(ep);
 	if (!ep_ctx) {
+		return -EINVAL;
+	}
+
+	if (!ep_ctx->cfg.en) {
+		LOG_ERR("Endpoint 0x%02x is not enabled", ep);
 		return -EINVAL;
 	}
 
@@ -1765,6 +1774,11 @@ int usb_dc_ep_read_continue(u8_t ep)
 		return -EINVAL;
 	}
 
+	if (!ep_ctx->cfg.en) {
+		LOG_ERR("Endpoint 0x%02x is not enabled", ep);
+		return -EINVAL;
+	}
+
 	k_mutex_lock(&ctx->drv_lock, K_FOREVER);
 	if (!ep_ctx->buf.len) {
 		ep_ctx->buf.curr = ep_ctx->buf.data;
@@ -1792,7 +1806,7 @@ int usb_dc_ep_read_continue(u8_t ep)
 int usb_dc_ep_read(const u8_t ep, u8_t *const data,
 		   const u32_t max_data_len, u32_t *const read_bytes)
 {
-	LOG_DBG("ep_read: ep %d, maxlen %d", ep, max_data_len);
+	LOG_DBG("ep_read: ep 0x%02x, maxlen %d", ep, max_data_len);
 	int ret;
 
 	ret = usb_dc_ep_read_wait(ep, data, max_data_len, read_bytes);

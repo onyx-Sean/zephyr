@@ -13,12 +13,12 @@
 #include <soc.h>
 #include <init.h>
 #include <device.h>
-#include <clock_control.h>
-#include <atomic.h>
+#include <drivers/clock_control.h>
+#include <sys/atomic.h>
 
-#include <misc/util.h>
-#include <misc/stack.h>
-#include <misc/byteorder.h>
+#include <sys/util.h>
+#include <debug/stack.h>
+#include <sys/byteorder.h>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>

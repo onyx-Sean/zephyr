@@ -9,7 +9,7 @@
 #include <zephyr.h>
 #include <ztest.h>
 #include <tc_util.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 #define NUM_TEST_ITEMS          6
 /* Each work item takes 100ms */
@@ -68,8 +68,9 @@ static void reset_results(void)
 {
 	int i;
 
-	for (i = 0; i < NUM_TEST_ITEMS; i++)
+	for (i = 0; i < NUM_TEST_ITEMS; i++) {
 		results[i] = 0;
+	}
 
 	num_results = 0;
 }

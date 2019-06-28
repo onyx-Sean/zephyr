@@ -15,12 +15,15 @@
 #include "settings/settings_file.h"
 #include <zephyr.h>
 
+
+bool settings_subsys_initialized;
+
 void settings_init(void);
 
 int settings_backend_init(void);
 
 #ifdef CONFIG_SETTINGS_FS
-#include <fs.h>
+#include <fs/fs.h>
 
 static struct settings_file config_init_settings_file = {
 	.cf_name = CONFIG_SETTINGS_FS_FILE,
@@ -59,7 +62,7 @@ int settings_backend_init(void)
 }
 
 #elif defined(CONFIG_SETTINGS_FCB)
-#include "fcb.h"
+#include <fs/fcb.h>
 #include "settings/settings_fcb.h"
 
 static struct flash_sector settings_fcb_area[CONFIG_SETTINGS_FCB_NUM_AREAS + 1];
@@ -123,10 +126,10 @@ int settings_backend_init(void)
 
 int settings_subsys_init(void)
 {
-	static bool settings_initialized;
+
 	int err = 0;
 
-	if (settings_initialized) {
+	if (settings_subsys_initialized) {
 		return 0;
 	}
 
@@ -135,7 +138,7 @@ int settings_subsys_init(void)
 	err = settings_backend_init(); /* func rises kernel panic once error */
 
 	if (!err) {
-		settings_initialized = true;
+		settings_subsys_initialized = true;
 	}
 
 	return err;

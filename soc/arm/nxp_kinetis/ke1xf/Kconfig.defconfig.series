@@ -17,6 +17,9 @@ config NUM_IRQS
 
 if CLOCK_CONTROL
 
+config CLOCK_CONTROL_MCUX_SCG
+	default y
+
 config CLOCK_CONTROL_MCUX_SIM
 	default y
 
@@ -24,6 +27,20 @@ config CLOCK_CONTROL_MCUX_PCC
 	default y
 
 endif # CLOCK_CONTROL
+
+if RTC
+
+config RTC_MCUX
+	default y
+
+endif # RTC
+
+if COUNTER
+
+config COUNTER_MCUX_RTC
+	default y
+
+endif # COUNTER
 
 if PINMUX
 
@@ -55,6 +72,27 @@ config UART_MCUX_LPUART
 	default y
 
 endif # SERIAL
+
+if I2C
+
+config I2C_MCUX_LPI2C
+	default y
+
+endif # I2C
+
+if SPI
+
+config SPI_MCUX_LPSPI
+	default y
+
+endif # SPI
+
+if ADC
+
+config ADC_MCUX_ADC12
+	default y
+
+endif # ADC
 
 source "soc/arm/nxp_kinetis/ke1xf/Kconfig.defconfig.mke*"
 

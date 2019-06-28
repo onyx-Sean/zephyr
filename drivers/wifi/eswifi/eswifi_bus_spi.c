@@ -12,8 +12,8 @@ LOG_MODULE_REGISTER(wifi_eswifi_bus_spi);
 #include <device.h>
 #include <string.h>
 #include <errno.h>
-#include <gpio.h>
-#include <spi.h>
+#include <drivers/gpio.h>
+#include <drivers/spi.h>
 
 #include "eswifi.h"
 
@@ -236,8 +236,8 @@ int eswifi_spi_init(struct eswifi_dev *eswifi)
 				  SPI_HOLD_ON_CS | SPI_LOCK_ON);
 	spi->spi_cfg.slave = DT_INVENTEK_ESWIFI_ESWIFI0_BASE_ADDRESS;
 	spi->spi_cs.gpio_dev =
-		device_get_binding(DT_INVENTEK_ESWIFI_ESWIFI0_CS_GPIO_CONTROLLER);
-	spi->spi_cs.gpio_pin = DT_INVENTEK_ESWIFI_ESWIFI0_CS_GPIO_PIN;
+		device_get_binding(DT_INVENTEK_ESWIFI_ESWIFI0_CS_GPIOS_CONTROLLER);
+	spi->spi_cs.gpio_pin = DT_INVENTEK_ESWIFI_ESWIFI0_CS_GPIOS_PIN;
 	spi->spi_cs.delay = 1000U;
 	spi->spi_cfg.cs = &spi->spi_cs;
 

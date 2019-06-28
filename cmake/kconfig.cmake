@@ -53,8 +53,13 @@ set(EXTRA_KCONFIG_TARGET_COMMAND_FOR_menuconfig
   ${ZEPHYR_BASE}/scripts/kconfig/menuconfig.py
   )
 
+set(EXTRA_KCONFIG_TARGET_COMMAND_FOR_guiconfig
+  ${ZEPHYR_BASE}/scripts/kconfig/guiconfig.py
+  )
+
 foreach(kconfig_target
     menuconfig
+    guiconfig
     ${EXTRA_KCONFIG_TARGETS}
     )
   add_custom_target(
@@ -112,6 +117,7 @@ set(
   merge_config_files
   ${BOARD_DEFCONFIG}
   ${CONF_FILE_AS_LIST}
+  ${shield_conf_files}
   ${OVERLAY_CONFIG_AS_LIST}
   ${EXTRA_KCONFIG_OPTIONS_FILE}
   ${config_files}

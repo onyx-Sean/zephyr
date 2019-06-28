@@ -6,9 +6,9 @@
  */
 
 #include <soc.h>
-#include <clock_control.h>
+#include <drivers/clock_control.h>
 #include <drivers/clock_control/nrf_clock_control.h>
-#include <system_timer.h>
+#include <drivers/timer/system_timer.h>
 #include <sys_clock.h>
 #include <nrf_rtc.h>
 #include <spinlock.h>
@@ -79,7 +79,7 @@ int z_clock_driver_init(struct device *device)
 
 	ARG_UNUSED(device);
 
-	clock = device_get_binding(DT_NORDIC_NRF_CLOCK_0_LABEL "_32K");
+	clock = device_get_binding(DT_INST_0_NORDIC_NRF_CLOCK_LABEL "_32K");
 	if (!clock) {
 		return -1;
 	}

@@ -21,7 +21,7 @@
 #include <logging/log_ctrl.h>
 
 #ifdef CONFIG_PRINTK
-#include <misc/printk.h>
+#include <sys/printk.h>
 #define PR_EXC(...) printk(__VA_ARGS__)
 #define STORE_xFAR(reg_var, reg) u32_t reg_var = (u32_t)reg
 #else
@@ -737,7 +737,7 @@ static void SecureStackDump(const NANO_ESF *secure_esf)
 		 */
 		top_of_sec_stack += ADDITIONAL_STATE_CONTEXT_WORDS;
 		secure_esf = (const NANO_ESF *)top_of_sec_stack;
-		sec_ret_addr = secure_esf->pc;
+		sec_ret_addr = secure_esf->basic.pc;
 	} else {
 		/* Exception during Non-Secure function call.
 		 * The return address is located on top of stack.

@@ -42,7 +42,7 @@
 #define _ASMLANGUAGE
 #include <linker/linker-defs.h>
 #include <offsets.h>
-#include <misc/util.h>
+#include <sys/util.h>
 
 #include <linker/linker-tool.h>
 
@@ -141,7 +141,6 @@ SECTIONS
 	. += CONFIG_IDT_NUM_VECTORS * 8;
 #endif /* LINKER_PASS2 */
 
-#ifndef CONFIG_X86_FIXED_IRQ_MAPPING
 	. = ALIGN(4);
 	_irq_to_interrupt_vector = .;
 #ifdef LINKER_PASS2
@@ -149,9 +148,12 @@ SECTIONS
 #else
 	. += CONFIG_MAX_IRQ_LINES;
 #endif
-#endif /* CONFIG_X86_FIXED_IRQ_MAPPING */
 #endif /* CONFIG_DYNAMIC_INTERRUPTS */
 
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-rodata.ld>
 #ifdef CONFIG_SOC_RODATA_LD
 #include <soc-rodata.ld>
 #endif
@@ -192,20 +194,10 @@ SECTIONS
 	/* RAMABLE_REGION */
 	GROUP_START(RAMABLE_REGION)
 
-#ifdef CONFIG_COVERAGE_GCOV
-	SECTION_PROLOGUE(_GCOV_BSS_SECTION_NAME, (NOLOAD),)
-	{
-		MMU_PAGE_ALIGN
-		__gcov_bss_start = .;
-		*(".bss.__gcov0.*");
-		. = ALIGN(4);
-		MMU_PAGE_ALIGN
-		__gcov_bss_end = .;
-	}GROUP_DATA_LINK_IN(RAMABLE_REGION, RAMABLE_REGION)
-
-	__gcov_bss_num_words = ((__gcov_bss_end - __gcov_bss_start) >> 2);
-	__gcov_bss_size = __gcov_bss_end - __gcov_bss_start;
-#endif /* CONFIG_COVERAGE_GCOV */
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-ram-sections.ld>
 
 #ifdef CONFIG_USERSPACE
 	/* APP SHARED MEMORY REGION */
@@ -260,6 +252,10 @@ SECTIONS
 	*(".noinit.*")
 	*(".kernel_noinit.*")
 
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-noinit.ld>
 #ifdef CONFIG_SOC_NOINIT_LD
 #include <soc-noinit.ld>
 #endif
@@ -278,7 +274,6 @@ SECTIONS
 	*(".kernel.*")
 
 #ifdef CONFIG_DYNAMIC_INTERRUPTS
-#ifndef CONFIG_X86_FIXED_IRQ_MAPPING
 	. = ALIGN(4);
 	_irq_to_interrupt_vector = .;
 #ifdef LINKER_PASS2
@@ -286,7 +281,6 @@ SECTIONS
 #else
 	. += CONFIG_MAX_IRQ_LINES;
 #endif /* LINKER_PASS2 */
-#endif /* CONFIG_X86_FIXED_IRQ_MAPPING */
 
 	z_interrupt_vectors_allocated = .;
 #ifdef LINKER_PASS2
@@ -296,6 +290,10 @@ SECTIONS
 #endif /* LINKER_PASS2 */
 #endif /* CONFIG_DYNAMIC_INTERRUPTS */
 
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-rwdata.ld>
 #ifdef CONFIG_SOC_RWDATA_LD
 #include <soc-rwdata.ld>
 #endif
@@ -446,6 +444,10 @@ SECTIONS
 /* Located in project source directory */
 #include <custom-sections.ld>
 #endif
+/* Located in generated directory. This file is populated by the
+ * zephyr_linker_sources() Cmake function.
+ */
+#include <snippets-sections.ld>
 
 #include <linker/debug-sections.ld>
 

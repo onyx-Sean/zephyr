@@ -5,13 +5,13 @@
  */
 
 #include <zephyr.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <board.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <device.h>
 #include <string.h>
-#include <pwm.h>
-#include <misc/stack.h>
+#include <drivers/pwm.h>
+#include <debug/stack.h>
 
 #include <display/mb_display.h>
 

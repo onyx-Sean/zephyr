@@ -15,10 +15,10 @@
 #include <errno.h>
 
 #include <kernel.h>
-#include <misc/printk.h>
-#include <misc/__assert.h>
+#include <sys/printk.h>
+#include <sys/__assert.h>
 #include "soc.h"
-#include <uart.h>
+#include <drivers/uart.h>
 #include <init.h>
 #include "shared_mem.h"
 #include <mmustructs.h>

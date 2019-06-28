@@ -15,6 +15,7 @@ if NET_SOCKETS
 
 config NET_SOCKETS_POSIX_NAMES
 	bool "Standard POSIX names for Sockets API"
+	depends on !POSIX_API
 	help
 	  By default, Sockets API function are prefixed with ``zsock_`` to avoid
 	  namespacing issues. If this option is enabled, they will be provided
@@ -122,6 +123,14 @@ config NET_SOCKETS_CAN
 	select NET_L2_CANBUS
 	help
 	  The value depends on your network needs.
+
+config NET_SOCKETS_CAN_RECEIVERS
+	int "How many simultaneous SocketCAN receivers are allowed"
+	default 1
+	depends on NET_SOCKETS_CAN
+	help
+	  The value tells how many sockets can receive data from same
+	  Socket-CAN interface.
 
 module = NET_SOCKETS
 module-dep = NET_LOG

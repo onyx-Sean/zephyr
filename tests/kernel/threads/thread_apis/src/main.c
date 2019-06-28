@@ -76,7 +76,7 @@ static void thread_name_entry(void)
 
 static void customdata_entry(void *p1, void *p2, void *p3)
 {
-	u32_t data = 1U;
+	long data = 1U;
 
 	zassert_is_null(k_thread_custom_data_get(), NULL);
 	while (1) {
@@ -84,7 +84,7 @@ static void customdata_entry(void *p1, void *p2, void *p3)
 		/* relinguish cpu for a while */
 		k_sleep(50);
 		/** TESTPOINT: custom data comparison */
-		zassert_equal(data, (u32_t)k_thread_custom_data_get(), NULL);
+		zassert_equal(data, (long)k_thread_custom_data_get(), NULL);
 		data++;
 	}
 }
@@ -214,7 +214,7 @@ void test_main(void)
 			 ztest_unit_test(test_threads_spawn_forever),
 			 ztest_unit_test(test_thread_start),
 			 ztest_unit_test(test_threads_suspend_resume_cooperative),
-			 ztest_unit_test(test_threads_suspend_resume_preemptible),
+			 ztest_user_unit_test(test_threads_suspend_resume_preemptible),
 			 ztest_unit_test(test_threads_priority_set),
 			 ztest_user_unit_test(test_threads_abort_self),
 			 ztest_user_unit_test(test_threads_abort_others),

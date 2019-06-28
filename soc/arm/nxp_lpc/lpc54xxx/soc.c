@@ -16,7 +16,7 @@
 #include <device.h>
 #include <init.h>
 #include <soc.h>
-#include <uart.h>
+#include <drivers/uart.h>
 #include <linker/sections.h>
 #include <arch/cpu.h>
 #include <cortex_m/exc.h>
@@ -86,8 +86,6 @@ static int nxp_lpc54114_init(struct device *arg)
 
 	/* disable interrupts */
 	oldLevel = irq_lock();
-
-	z_clearfaults();
 
 	/* Initialize FRO/system clock to 48 MHz */
 	clkInit();

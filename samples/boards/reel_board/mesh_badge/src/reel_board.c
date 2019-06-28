@@ -7,11 +7,11 @@
 
 #include <zephyr.h>
 #include <device.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <display/cfb.h>
-#include <misc/printk.h>
-#include <flash.h>
-#include <sensor.h>
+#include <sys/printk.h>
+#include <drivers/flash.h>
+#include <drivers/sensor.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -588,7 +588,7 @@ void board_refresh_display(void)
 
 int board_init(void)
 {
-	epd_dev = device_get_binding(DT_SOLOMON_SSD1673FB_0_LABEL);
+	epd_dev = device_get_binding(DT_INST_0_SOLOMON_SSD1673FB_LABEL);
 	if (epd_dev == NULL) {
 		printk("SSD1673 device not found\n");
 		return -ENODEV;

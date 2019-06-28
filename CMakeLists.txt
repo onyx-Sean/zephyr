@@ -12,7 +12,7 @@
 # expect to learn how to build the kernel reading this file.
 
 if(NOT DEFINED ZEPHYR_BINARY_DIR)
-  message(FATAL_ERROR "A user error has occured.
+  message(FATAL_ERROR "A user error has occurred.
 cmake was invoked with '${CMAKE_CURRENT_LIST_DIR}' specified as the source directory,
 but it must be invoked with an application source directory,
 such as '${CMAKE_CURRENT_LIST_DIR}/samples/hello_world'.
@@ -21,14 +21,31 @@ CMAKE_CACHEFILE_DIR: ${CMAKE_CACHEFILE_DIR}
 ")
 endif()
 
+
+# See https://gitlab.kitware.com/cmake/cmake/issues/16228
+# and https://cmake.org/pipermail/cmake/2019-May/thread.html#69496
+if(NOT ZEPHYR_BASE STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+message(WARNING "ZEPHYR_BASE doesn't match CMAKE_CURRENT_SOURCE_DIR
+  ZEPHYR_BASE              = ${ZEPHYR_BASE}
+  PWD                      = $ENV{PWD}
+  CMAKE_CURRENT_SOURCE_DIR = ${CMAKE_CURRENT_SOURCE_DIR}
+You may be using a mix of symbolic links and real paths which causes \
+subtle and hard to debug CMake issues.")
+endif()
+# For Zephyr more specifically this breaks (at least)
+#     -fmacro-prefix-map=${ZEPHYR_BASE}=
+
 project(Zephyr-Kernel VERSION ${PROJECT_VERSION})
 enable_language(C CXX ASM)
 
 # Verify that the toolchain can compile a dummy file, if it is not we
-# won't be able to test for compatiblity with certain C flags.
+# won't be able to test for compatibility with certain C flags.
 check_c_compiler_flag("" toolchain_is_ok)
 assert(toolchain_is_ok "The toolchain is unable to build a dummy C file. See CMakeError.log.")
 
+# In some cases the "final" things are not used at all and "_prebuilt"
+# is the last station. See "logical_target_for_zephyr_elf" below for
+# details.
 set(CMAKE_EXECUTABLE_SUFFIX .elf)
 set(ZEPHYR_PREBUILT_EXECUTABLE zephyr_prebuilt)
 set(ZEPHYR_FINAL_EXECUTABLE    zephyr_final)
@@ -149,27 +166,29 @@ toolchain_cc_cpp_dialect_std_14_flags(CPP_DIALECT_STD_14_FLAGS)
 toolchain_cc_cpp_dialect_std_17_flags(CPP_DIALECT_STD_17_FLAGS)
 toolchain_cc_cpp_dialect_std_2a_flags(CPP_DIALECT_STD_2A_FLAGS)
 
-# From kconfig choice, pick a single dialect.
-# Kconfig choice ensures only one of these CONFIG_STD_CPP* is set.
-if(CONFIG_STD_CPP98)
-  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_98_FLAGS})
-elseif(CONFIG_STD_CPP11)
-  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_11_FLAGS}) # Default in kconfig
-elseif(CONFIG_STD_CPP14)
-  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_14_FLAGS})
-elseif(CONFIG_STD_CPP17)
-  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_17_FLAGS})
-elseif(CONFIG_STD_CPP2A)
-  set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_2A_FLAGS})
-else()
-  assert(0 "Unreachable code. Expected C++ standard to have been chosen. See Kconfig.zephyr.")
-endif()
+if(CONFIG_CPLUSPLUS)
+  # From kconfig choice, pick a single dialect.
+  # Kconfig choice ensures only one of these CONFIG_STD_CPP* is set.
+  if(CONFIG_STD_CPP98)
+    set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_98_FLAGS})
+  elseif(CONFIG_STD_CPP11)
+    set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_11_FLAGS}) # Default in kconfig
+  elseif(CONFIG_STD_CPP14)
+    set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_14_FLAGS})
+  elseif(CONFIG_STD_CPP17)
+    set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_17_FLAGS})
+  elseif(CONFIG_STD_CPP2A)
+    set(STD_CPP_DIALECT_FLAGS ${CPP_DIALECT_STD_2A_FLAGS})
+  else()
+    assert(0 "Unreachable code. Expected C++ standard to have been chosen. See Kconfig.zephyr.")
+  endif()
 
-foreach(flag ${STD_CPP_DIALECT_FLAGS})
-  zephyr_compile_options(
-    $<$<COMPILE_LANGUAGE:CXX>:${flag}>
-  )
-endforeach()
+  foreach(flag ${STD_CPP_DIALECT_FLAGS})
+    zephyr_compile_options(
+      $<$<COMPILE_LANGUAGE:CXX>:${flag}>
+    )
+  endforeach()
+endif()
 
 if(NOT CONFIG_EXCEPTIONS)
   # @Intent: Obtain compiler specific flags related to C++ Exceptions
@@ -188,18 +207,30 @@ if(NOT CONFIG_RTTI)
 endif()
 
 if(CONFIG_MISRA_SANE)
-  zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:-Werror=vla>)
-  zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Werror=vla>)
+  # @Intent: Obtain toolchain compiler flags relating to MISRA.
+  toolchain_cc_warning_error_misra_sane(CC_MISRA_SANE_FLAG)
+  toolchain_cc_cpp_warning_error_misra_sane(CPP_MISRA_SANE_FLAG)
+  zephyr_compile_options($<$<COMPILE_LANGUAGE:C>:${CC_MISRA_SANE_FLAG}>)
+  zephyr_compile_options($<$<COMPILE_LANGUAGE:CXX>:${CPP_MISRA_SANE_FLAG}>)
 endif()
 
 # @Intent: Set compiler specific flags for standard C includes
 toolchain_cc_nostdinc()
 
+# @Intent: Set compiler specific macro inclusion of AUTOCONF_H
+toolchain_cc_imacros(${AUTOCONF_H})
+
+# @Intent: Enforce standard integer type correspondance to match Zephyr usage.
+toolchain_cc_imacros(${ZEPHYR_BASE}/include/toolchain/zephyr_stdint.h)
+
+# @Intent: Set compiler specific flag for bare metal freestanding option
+toolchain_cc_freestanding()
+
+# @Intent: Set compiler specific flag for tentative definitions, no-common
+toolchain_cc_nocommon()
+
 zephyr_compile_options(
   -g # TODO: build configuration enough?
-  -imacros ${AUTOCONF_H}
-  -ffreestanding
-  -fno-common
   ${TOOLCHAIN_C_FLAGS}
 )
 
@@ -217,6 +248,11 @@ zephyr_compile_options(
 # @Intent: Set fundamental linker specific flags
 toolchain_ld_base()
 
+toolchain_ld_force_undefined_symbols(
+  _OffsetAbsSyms
+  _ConfigAbsSyms
+)
+
 if(NOT CONFIG_NATIVE_APPLICATION)
   # @Intent: Set linker specific flags for bare metal target
   toolchain_ld_baremetal()
@@ -227,7 +263,7 @@ if(CONFIG_LIB_CPLUSPLUS)
   toolchain_ld_cpp()
 endif()
 
-# @Intent Add the basic toolchain warning flags
+# @Intent: Add the basic toolchain warning flags
 toolchain_cc_warning_base()
 
 # ==========================================================================
@@ -238,7 +274,7 @@ toolchain_cc_warning_base()
 # W=2 - warnings that occur quite often but may still be relevant
 # W=3 - the more obscure warnings, can most likely be ignored
 # ==========================================================================
-# @Intent Add cmake -DW toolchain supported warnings, if any
+# @Intent: Add cmake -DW toolchain supported warnings, if any
 if(W MATCHES "1")
   toolchain_cc_warning_dw_1()
 endif()
@@ -251,8 +287,11 @@ if(W MATCHES "3")
   toolchain_cc_warning_dw_3()
 endif()
 
-# @Intent Add extended, more specific, toolchain warning flags
+# @Intent: Add extended, more specific, toolchain warning flags
 toolchain_cc_warning_extended()
+
+# @Intent: Trigger an error when a declaration does not specify a type
+toolchain_cc_warning_error_implicit_int()
 
 # Allow the user to inject options when calling cmake, e.g.
 # 'cmake -DEXTRA_CFLAGS="-Werror -Wno-deprecated-declarations" ..'
@@ -287,19 +326,19 @@ endif()
 
 zephyr_cc_option_ifdef(CONFIG_STACK_USAGE            -fstack-usage)
 
-# Force an error when things like SYS_INIT(foo, ...) occur with a missing header.
-zephyr_cc_option(-Werror=implicit-int)
-
 # If the compiler supports it, strip the ${ZEPHYR_BASE} prefix from the
 # __FILE__ macro used in __ASSERT*, in the
 # .noinit."/home/joe/zephyr/fu/bar.c" section names and in any
 # application code. This saves some memory, stops leaking user locations
 # in binaries, makes failure logs more deterministic and most
 # importantly makes builds more deterministic
-zephyr_cc_option(-fmacro-prefix-map=${ZEPHYR_BASE}=.)
 
-# Prohibit date/time macros, which would make the build non-deterministic
-# cc-option(-Werror=date-time)
+# If both match then the last one wins. This matters for tests/ and
+# samples/ inside *both* CMAKE_SOURCE_DIR and ZEPHYR_BASE: for them
+# let's strip the shortest prefix.
+zephyr_cc_option(-fmacro-prefix-map=${CMAKE_SOURCE_DIR}=CMAKE_SOURCE_DIR)
+zephyr_cc_option(-fmacro-prefix-map=${ZEPHYR_BASE}=ZEPHYR_BASE)
+# TODO: -fmacro-prefix-map=modules/etc. "build/zephyr_modules.txt" might help.
 
 # TODO: Archiver arguments
 # ar_option(D)
@@ -428,7 +467,12 @@ if(EXISTS ${CMAKE_BINARY_DIR}/zephyr_modules.txt)
     string(REGEX REPLACE "\"(.*)\":\".*\"" "\\1" module_name ${module})
     string(REGEX REPLACE "\".*\":\"(.*)\"" "\\1" module_path ${module})
     message("Including module: ${module_name} in path: ${module_path}")
-    add_subdirectory(${module_path} ${CMAKE_BINARY_DIR}/${module_name})
+    # Note the second, binary_dir parameter requires the added
+    # subdirectory to have its own, local cmake target(s). If not then
+    # this binary_dir is created but stays empty. Object files land in
+    # the main binary dir instead.
+    # https://cmake.org/pipermail/cmake/2019-June/069547.html
+    add_subdirectory(${module_path} ${CMAKE_BINARY_DIR}/modules/${module_name})
   endforeach()
 endif()
 
@@ -639,20 +683,6 @@ set_property(TARGET
   ${LINKER_SCRIPT_TARGET}
   PROPERTY INCLUDE_DIRECTORIES
   ${ZEPHYR_INCLUDE_DIRS}
-  )
-
-set(zephyr_lnk
-  ${LINKERFLAGPREFIX},-Map=${PROJECT_BINARY_DIR}/${KERNEL_MAP_NAME}
-  -u_OffsetAbsSyms
-  -u_ConfigAbsSyms
-  ${LINKERFLAGPREFIX},--whole-archive
-  ${ZEPHYR_LIBS_PROPERTY}
-  ${LINKERFLAGPREFIX},--no-whole-archive
-  kernel
-  $<TARGET_OBJECTS:${OFFSETS_LIB}>
-  ${LIB_INCLUDE_DIR}
-  -L${PROJECT_BINARY_DIR}
-  ${TOOLCHAIN_LIBS}
   )
 
 if(CONFIG_GEN_ISR_TABLES)
@@ -966,8 +996,10 @@ get_property(GKSF GLOBAL PROPERTY GENERATED_KERNEL_SOURCE_FILES)
 get_property(CSTD GLOBAL PROPERTY CSTD)
 set_ifndef(CSTD c99)
 
+# @Intent: Obtain compiler specific flag for specifying the c standard
+toolchain_cc_cstd_flag(CC_CSTD ${CSTD})
 zephyr_compile_options(
-  $<$<COMPILE_LANGUAGE:C>:-std=${CSTD}>
+  $<$<COMPILE_LANGUAGE:C>:${CC_CSTD}>
 )
 
 # @Intent: Configure linker scripts, i.e. generate linker scripts with variables substituted
@@ -994,7 +1026,7 @@ if(CONFIG_USERSPACE)
     set(NEWLIB_PART -l libc.a z_libc_partition)
   endif()
   if(CONFIG_MBEDTLS)
-    set(MBEDTLS_PART -l libext__lib__crypto__mbedtls.a k_mbedtls_partition)
+    set(MBEDTLS_PART -l lib..__modules__crypto__mbedtls.a k_mbedtls_partition)
   endif()
 
   add_custom_command(
@@ -1035,7 +1067,14 @@ if(CONFIG_USERSPACE)
 
   set(APP_SMEM_UNALIGNED_LIB app_smem_unaligned_output_obj_renamed_lib)
   add_executable(       app_smem_unaligned_prebuilt misc/empty_file.c)
-  target_link_libraries(app_smem_unaligned_prebuilt ${TOPT} ${PROJECT_BINARY_DIR}/linker_app_smem_unaligned.cmd ${zephyr_lnk} ${CODE_RELOCATION_DEP})
+  toolchain_ld_link_elf(
+    TARGET_ELF            app_smem_unaligned_prebuilt
+    OUTPUT_MAP            ${PROJECT_BINARY_DIR}/app_smem_unaligned_prebuilt.map
+    LIBRARIES_PRE_SCRIPT  ""
+    LINKER_SCRIPT         ${PROJECT_BINARY_DIR}/linker_app_smem_unaligned.cmd
+    LIBRARIES_POST_SCRIPT ""
+    DEPENDENCIES          ${CODE_RELOCATION_DEP}
+  )
   set_property(TARGET   app_smem_unaligned_prebuilt PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker_app_smem_unaligned.cmd)
   add_dependencies(     app_smem_unaligned_prebuilt linker_app_smem_unaligned_script ${OFFSETS_LIB})
 
@@ -1080,14 +1119,28 @@ if(CONFIG_USERSPACE AND CONFIG_ARM)
 
   set(PRIV_STACK_LIB priv_stacks_output_obj_renamed_lib)
   add_executable(       priv_stacks_prebuilt misc/empty_file.c)
-  target_link_libraries(priv_stacks_prebuilt ${TOPT} ${PROJECT_BINARY_DIR}/linker_priv_stacks.cmd ${zephyr_lnk} ${CODE_RELOCATION_DEP})
+  toolchain_ld_link_elf(
+    TARGET_ELF            priv_stacks_prebuilt
+    OUTPUT_MAP            ${PROJECT_BINARY_DIR}/priv_stacks_prebuilt.map
+    LIBRARIES_PRE_SCRIPT  ""
+    LINKER_SCRIPT         ${PROJECT_BINARY_DIR}/linker_priv_stacks.cmd
+    LIBRARIES_POST_SCRIPT ""
+    DEPENDENCIES          ${CODE_RELOCATION_DEP}
+  )
   set_property(TARGET   priv_stacks_prebuilt PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker_priv_stacks.cmd)
   add_dependencies(     priv_stacks_prebuilt linker_priv_stacks_script ${OFFSETS_LIB})
 endif()
 
 # FIXME: Is there any way to get rid of empty_file.c?
 add_executable(       ${ZEPHYR_PREBUILT_EXECUTABLE} misc/empty_file.c)
-target_link_libraries(${ZEPHYR_PREBUILT_EXECUTABLE} ${TOPT} ${PROJECT_BINARY_DIR}/linker.cmd ${PRIV_STACK_LIB} ${zephyr_lnk} ${CODE_RELOCATION_DEP})
+toolchain_ld_link_elf(
+  TARGET_ELF            ${ZEPHYR_PREBUILT_EXECUTABLE}
+  OUTPUT_MAP            ${PROJECT_BINARY_DIR}/${ZEPHYR_PREBUILT_EXECUTABLE}.map
+  LIBRARIES_PRE_SCRIPT  ""
+  LINKER_SCRIPT         ${PROJECT_BINARY_DIR}/linker.cmd
+  LIBRARIES_POST_SCRIPT ${PRIV_STACK_LIB}
+  DEPENDENCIES          ${CODE_RELOCATION_DEP}
+)
 set_property(TARGET   ${ZEPHYR_PREBUILT_EXECUTABLE} PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker.cmd)
 add_dependencies(     ${ZEPHYR_PREBUILT_EXECUTABLE} ${PRIV_STACK_DEP} ${LINKER_SCRIPT_TARGET} ${OFFSETS_LIB})
 
@@ -1123,7 +1176,14 @@ else()
   )
 
   add_executable(       ${ZEPHYR_FINAL_EXECUTABLE} misc/empty_file.c ${GKSF})
-  target_link_libraries(${ZEPHYR_FINAL_EXECUTABLE} ${GKOF} ${TOPT} ${PROJECT_BINARY_DIR}/linker_pass_final.cmd ${zephyr_lnk} ${CODE_RELOCATION_DEP})
+  toolchain_ld_link_elf(
+    TARGET_ELF            ${ZEPHYR_FINAL_EXECUTABLE}
+    OUTPUT_MAP            ${PROJECT_BINARY_DIR}/${ZEPHYR_FINAL_EXECUTABLE}.map
+    LIBRARIES_PRE_SCRIPT  ${GKOF}
+    LINKER_SCRIPT         ${PROJECT_BINARY_DIR}/linker_pass_final.cmd
+    LIBRARIES_POST_SCRIPT ""
+    DEPENDENCIES          ${CODE_RELOCATION_DEP}
+  )
   set_property(TARGET   ${ZEPHYR_FINAL_EXECUTABLE} PROPERTY LINK_DEPENDS ${PROJECT_BINARY_DIR}/linker_pass_final.cmd)
   add_dependencies(     ${ZEPHYR_FINAL_EXECUTABLE} ${PRIV_STACK_DEP} ${LINKER_PASS_FINAL_SCRIPT_TARGET})
 
@@ -1135,7 +1195,7 @@ endif()
 # application to know what the name of the final elf target is.
 set(logical_target_for_zephyr_elf ${logical_target_for_zephyr_elf} PARENT_SCOPE)
 
-# Override the base name of final .elf so:
+# Override the base name of the last, "logical" .elf output (and last .map) so:
 # 1. it doesn't depend on the number of passes above and the
 #    post_build_commands below can always find it no matter which is it;
 # 2. it can be defined in Kconfig
@@ -1143,6 +1203,12 @@ set_target_properties(${logical_target_for_zephyr_elf} PROPERTIES OUTPUT_NAME ${
 
 set(post_build_commands "")
 set(post_build_byproducts "")
+
+list(APPEND
+  post_build_commands
+  COMMAND
+  cmake -E rename ${logical_target_for_zephyr_elf}.map ${KERNEL_MAP_NAME}
+)
 
 if(NOT CONFIG_BUILD_NO_GAP_FILL)
   # Use ';' as separator to get proper space in resulting command.
@@ -1333,6 +1399,7 @@ add_subdirectory(cmake/flash)
 add_subdirectory(cmake/usage)
 add_subdirectory(cmake/reports)
 
+if(NOT CONFIG_TEST)
 if(CONFIG_ASSERT AND (NOT CONFIG_FORCE_NO_ASSERT))
   message(WARNING "
       ------------------------------------------------------------
@@ -1340,6 +1407,7 @@ if(CONFIG_ASSERT AND (NOT CONFIG_FORCE_NO_ASSERT))
       --- The kernel will run more slowly and use more memory  ---
       ------------------------------------------------------------"
   )
+endif()
 endif()
 
 if(CONFIG_BOARD_DEPRECATED)

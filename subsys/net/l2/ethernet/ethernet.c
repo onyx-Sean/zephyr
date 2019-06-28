@@ -19,6 +19,8 @@ LOG_MODULE_REGISTER(net_ethernet, CONFIG_NET_L2_ETHERNET_LOG_LEVEL);
 #include <net/lldp.h>
 #endif
 
+#include <syscall_handler.h>
+
 #include "arp.h"
 #include "eth_stats.h"
 #include "net_private.h"
@@ -145,6 +147,23 @@ static inline bool eth_is_vlan_tag_stripped(struct net_if *iface)
 	return (api->get_capabilities(dev) & ETHERNET_HW_VLAN_TAG_STRIP);
 }
 
+/* Drop packet if it has broadcast destination MAC address but the IP
+ * address is not multicast or broadcast address. See RFC 1122 ch 3.3.6
+ */
+static inline
+enum net_verdict ethernet_check_ipv4_bcast_addr(struct net_pkt *pkt,
+						struct net_eth_hdr *hdr)
+{
+	if (net_eth_is_addr_broadcast(&hdr->dst) &&
+	    !(net_ipv4_is_addr_mcast(&NET_IPV4_HDR(pkt)->dst) ||
+	      net_ipv4_is_addr_bcast(net_pkt_iface(pkt),
+				     &NET_IPV4_HDR(pkt)->dst))) {
+		return NET_DROP;
+	}
+
+	return NET_OK;
+}
+
 static enum net_verdict ethernet_recv(struct net_if *iface,
 				      struct net_pkt *pkt)
 {
@@ -240,9 +259,14 @@ static enum net_verdict ethernet_recv(struct net_if *iface,
 		goto drop;
 	}
 
-	ethernet_update_rx_stats(iface, pkt, net_pkt_get_len(pkt));
-
 	net_buf_pull(pkt->frags, hdr_len);
+
+	if (IS_ENABLED(CONFIG_NET_IPV4) && type == NET_ETH_PTYPE_IP &&
+	    ethernet_check_ipv4_bcast_addr(pkt, hdr) == NET_DROP) {
+		goto drop;
+	}
+
+	ethernet_update_rx_stats(iface, pkt, net_pkt_get_len(pkt) + hdr_len);
 
 #ifdef CONFIG_NET_ARP
 	if (family == AF_INET && type == NET_ETH_PTYPE_ARP) {
@@ -576,7 +600,7 @@ static int ethernet_send(struct net_if *iface, struct net_pkt *pkt)
 	}
 
 	/* If the ll dst addr has not been set before, let's assume
-	 * temporarly it's a broadcast one. When filling the header,
+	 * temporarily it's a broadcast one. When filling the header,
 	 * it might detect this should be multicast and act accordingly.
 	 */
 	if (!net_pkt_lladdr_dst(pkt)->addr) {
@@ -943,9 +967,9 @@ void net_eth_carrier_off(struct net_if *iface)
 	handle_carrier(ctx, iface, carrier_off);
 }
 
+#if defined(CONFIG_PTP_CLOCK)
 struct device *net_eth_get_ptp_clock(struct net_if *iface)
 {
-#if defined(CONFIG_PTP_CLOCK)
 	struct device *dev = net_if_get_device(iface);
 	const struct ethernet_api *api = dev->driver_api;
 
@@ -962,10 +986,36 @@ struct device *net_eth_get_ptp_clock(struct net_if *iface)
 	}
 
 	return api->get_ptp_clock(net_if_get_device(iface));
-#else
-	return NULL;
-#endif
 }
+#endif /* CONFIG_PTP_CLOCK */
+
+#if defined(CONFIG_PTP_CLOCK)
+struct device *z_impl_net_eth_get_ptp_clock_by_index(int index)
+{
+	struct net_if *iface;
+
+	iface = net_if_get_by_index(index);
+	if (!iface) {
+		return NULL;
+	}
+
+	return net_eth_get_ptp_clock(iface);
+}
+
+#ifdef CONFIG_USERSPACE
+Z_SYSCALL_HANDLER(net_eth_get_ptp_clock_by_index, index)
+{
+	return (u32_t)z_impl_net_eth_get_ptp_clock_by_index(index);
+}
+#endif /* CONFIG_USERSPACE */
+#else /* CONFIG_PTP_CLOCK */
+struct device *z_impl_net_eth_get_ptp_clock_by_index(int index)
+{
+	ARG_UNUSED(index);
+
+	return NULL;
+}
+#endif /* CONFIG_PTP_CLOCK */
 
 #if defined(CONFIG_NET_GPTP)
 int net_eth_get_ptp_port(struct net_if *iface)

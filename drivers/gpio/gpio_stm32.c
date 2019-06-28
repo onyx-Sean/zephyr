@@ -9,11 +9,11 @@
 #include <kernel.h>
 #include <device.h>
 #include <soc.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <clock_control/stm32_clock_control.h>
 #include <pinmux/stm32/pinmux_stm32.h>
-#include <pinmux.h>
-#include <misc/util.h>
+#include <drivers/pinmux.h>
+#include <sys/util.h>
 #include <interrupt_controller/exti_stm32.h>
 
 #include "gpio_stm32.h"
@@ -273,7 +273,7 @@ static int gpio_stm32_config(struct device *dev, int access_op,
 		return -EIO;
 	}
 
-	if ((flags & GPIO_INT) != 0) {
+	if (IS_ENABLED(CONFIG_EXTI_STM32) && (flags & GPIO_INT) != 0) {
 
 		if (stm32_exti_set_callback(pin, cfg->port,
 					    gpio_stm32_isr, dev) != 0) {

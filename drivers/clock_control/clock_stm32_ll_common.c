@@ -7,9 +7,8 @@
  */
 
 #include <soc.h>
-#include <soc_registers.h>
-#include <clock_control.h>
-#include <misc/util.h>
+#include <drivers/clock_control.h>
+#include <sys/util.h>
 #include <clock_control/stm32_clock_control.h>
 #include "clock_stm32_ll_common.h"
 
@@ -344,7 +343,7 @@ static int stm32_clock_control_init(struct device *dev)
 	LL_RCC_HSI_Disable();
 	LL_RCC_MSI_Disable();
 
-#endif /* CONFIG_CLOCK_STM32_PLL_SRC_... */
+#endif /* CONFIG_CLOCK_STM32_PLL_SRC_* */
 
 #elif CONFIG_CLOCK_STM32_SYSCLK_SRC_HSE
 

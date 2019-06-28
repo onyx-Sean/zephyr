@@ -5,14 +5,14 @@
  */
 
 #include <clock_control/stm32_clock_control.h>
-#include <clock_control.h>
-#include <misc/util.h>
+#include <drivers/clock_control.h>
+#include <sys/util.h>
 #include <string.h>
 #include <kernel.h>
 #include <soc.h>
 #include <errno.h>
 #include <stdbool.h>
-#include <can.h>
+#include <drivers/can.h>
 #include "can_stm32.h"
 
 #include <logging/log.h>
@@ -820,7 +820,7 @@ static const struct can_stm32_config can_stm32_cfg_1 = {
 	.can = (CAN_TypeDef *)DT_CAN_1_BASE_ADDRESS,
 	.bus_speed = DT_CAN_1_BUS_SPEED,
 	.sjw = DT_CAN_1_SJW,
-	.prop_bs1 = DT_CAN_1_PROP_SEG_PHASE_SEG1,
+	.prop_bs1 = DT_CAN_1_PROP_SEG + DT_CAN_1_PHASE_SEG1,
 	.bs2 = DT_CAN_1_PHASE_SEG2,
 	.pclken = {
 		.enr = DT_CAN_1_CLOCK_BITS,

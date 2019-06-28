@@ -11,7 +11,7 @@
  */
 
 #include <errno.h>
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <net/net_context.h>
 #include <net/net_pkt.h>
 
@@ -109,6 +109,13 @@ static inline u16_t net_calc_chksum_icmpv4(struct net_pkt *pkt)
 
 static inline u16_t net_calc_chksum_udp(struct net_pkt *pkt)
 {
+	u16_t chksum = net_calc_chksum(pkt, IPPROTO_UDP);
+
+	return chksum == 0U ? 0xffff : chksum;
+}
+
+static inline u16_t net_calc_verify_chksum_udp(struct net_pkt *pkt)
+{
 	return net_calc_chksum(pkt, IPPROTO_UDP);
 }
 
@@ -140,13 +147,16 @@ static inline void net_hexdump(const char *str,
 static inline void net_pkt_hexdump(struct net_pkt *pkt, const char *str)
 {
 	struct net_buf *buf = pkt->buffer;
+	char pkt_str[sizeof("0x") + sizeof(intptr_t) * 2];
 
 	if (str && str[0]) {
 		LOG_DBG("%s", str);
 	}
 
+	snprintk(pkt_str, sizeof(pkt_str), "%p", pkt);
+
 	while (buf) {
-		LOG_HEXDUMP_DBG(buf->data, buf->len, "");
+		LOG_HEXDUMP_DBG(buf->data, buf->len, log_strdup(pkt_str));
 		buf = buf->frags;
 	}
 }

@@ -11,6 +11,11 @@
 #include <irq_offload.h>
 #include <kswap.h>
 
+#if defined(CONFIG_USERSPACE)
+#include <syscall_handler.h>
+#include "test_syscalls.h"
+#endif
+
 #if defined(CONFIG_X86) && defined(CONFIG_X86_MMU)
 #define STACKSIZE (8192)
 #else
@@ -136,28 +141,32 @@ void blow_up_stack(void)
 {
 	stack_smasher(37);
 }
-#endif
+
+#if defined(CONFIG_USERSPACE)
+
+void z_impl_blow_up_priv_stack(void)
+{
+	blow_up_stack();
+}
+
+Z_SYSCALL_HANDLER0_SIMPLE_VOID(blow_up_priv_stack);
+
+#endif /* CONFIG_USERSPACE */
+#endif /* CONFIG_STACK_SENTINEL */
 
 void stack_sentinel_timer(void)
 {
-	u32_t cur_tick;
-
-	/* Test that stack overflow check due to timer interrupt works */
-	blow_up_stack();
-	TC_PRINT("waiting for tick advance...\n");
-
-	/* This test has tickless kernel disabled, z_tick_get_32() returns
-	 * the current tick count without trying to offset it by checking
-	 * time elapsed in the driver since last update
+	/* We need to guarantee that we receive an interrupt, so set a
+	 * k_timer and spin until we die.  Spinning alone won't work
+	 * on a tickless kernel.
 	 */
-	cur_tick = z_tick_get_32();
+	struct k_timer timer;
 
-	while (cur_tick == z_tick_get_32()) {
-		/* spin */
+	blow_up_stack();
+	k_timer_init(&timer, NULL, NULL);
+	k_timer_start(&timer, 1, 0);
+	while (true) {
 	}
-
-	TC_ERROR("should never see this\n");
-	rv = TC_FAIL;
 }
 
 void stack_sentinel_swap(void)
@@ -180,6 +189,18 @@ void stack_hw_overflow(void)
 	TC_ERROR("should never see this\n");
 	rv = TC_FAIL;
 }
+
+#if defined(CONFIG_USERSPACE)
+void user_priv_stack_hw_overflow(void)
+{
+	/* Test that HW stack overflow check works
+	 * on a user thread's privilege stack.
+	 */
+	blow_up_priv_stack();
+	TC_ERROR("should never see this\n");
+	rv = TC_FAIL;
+}
+#endif /* CONFIG_USERSPACE */
 
 void check_stack_overflow(void *handler, u32_t flags)
 {
@@ -287,6 +308,15 @@ void test_fatal(void)
 
 	TC_PRINT("test stack HW-based overflow - supervisor 2\n");
 	check_stack_overflow(stack_hw_overflow, 0);
+
+#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+	TC_PRINT("test stack HW-based overflow (FPU thread) - supervisor 1\n");
+	check_stack_overflow(stack_hw_overflow, K_FP_REGS);
+
+	TC_PRINT("test stack HW-based overflow (FPU thread) - supervisor 2\n");
+	check_stack_overflow(stack_hw_overflow, K_FP_REGS);
+#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
+
 #endif /* CONFIG_HW_STACK_PROTECTION */
 
 #ifdef CONFIG_USERSPACE
@@ -296,6 +326,21 @@ void test_fatal(void)
 
 	TC_PRINT("test stack HW-based overflow - user 2\n");
 	check_stack_overflow(stack_hw_overflow, K_USER);
+
+	TC_PRINT("test stack HW-based overflow - user priv stack 1\n");
+	check_stack_overflow(user_priv_stack_hw_overflow, K_USER);
+
+	TC_PRINT("test stack HW-based overflow - user priv stack 2\n");
+	check_stack_overflow(user_priv_stack_hw_overflow, K_USER);
+
+#if defined(CONFIG_FLOAT) && defined(CONFIG_FP_SHARING)
+	TC_PRINT("test stack HW-based overflow (FPU thread) - user 1\n");
+	check_stack_overflow(stack_hw_overflow, K_USER | K_FP_REGS);
+
+	TC_PRINT("test stack HW-based overflow (FPU thread) - user 2\n");
+	check_stack_overflow(stack_hw_overflow, K_USER | K_FP_REGS);
+#endif /* CONFIG_FLOAT && CONFIG_FP_SHARING */
+
 #endif /* CONFIG_USERSPACE */
 
 #endif /* !CONFIG_ARCH_POSIX */

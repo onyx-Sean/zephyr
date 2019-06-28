@@ -48,8 +48,8 @@
 #include <string.h>
 #include <usb/usb_device.h>
 #include <clock_control/stm32_clock_control.h>
-#include <misc/util.h>
-#include <gpio.h>
+#include <sys/util.h>
+#include <drivers/gpio.h>
 
 #define LOG_LEVEL CONFIG_USB_DRIVER_LOG_LEVEL
 #include <logging/log.h>
@@ -533,7 +533,7 @@ int usb_dc_ep_start_read(u8_t ep, u8_t *data, u32_t max_data_len)
 
 int usb_dc_ep_get_read_count(u8_t ep, u32_t *read_bytes)
 {
-	if (!EP_IS_OUT(ep)) {
+	if (!EP_IS_OUT(ep) || !read_bytes) {
 		LOG_ERR("invalid ep 0x%02x", ep);
 		return -EINVAL;
 	}
@@ -659,7 +659,7 @@ int usb_dc_ep_is_stalled(const u8_t ep, u8_t *const stalled)
 
 	LOG_DBG("ep 0x%02x", ep);
 
-	if (!ep_state) {
+	if (!ep_state || !stalled) {
 		return -EINVAL;
 	}
 
@@ -730,7 +730,7 @@ int usb_dc_ep_write(const u8_t ep, const u8_t *const data,
 
 	LOG_DBG("ep 0x%02x, len %u", ep, data_len);
 
-	if (!EP_IS_IN(ep)) {
+	if (!ep_state || !EP_IS_IN(ep)) {
 		LOG_ERR("invalid ep 0x%02x", ep);
 		return -EINVAL;
 	}
@@ -822,7 +822,7 @@ int usb_dc_ep_read_continue(u8_t ep)
 {
 	struct usb_dc_stm32_ep_state *ep_state = usb_dc_stm32_get_ep_state(ep);
 
-	if (!EP_IS_OUT(ep)) { /* Check if OUT ep */
+	if (!ep_state || !EP_IS_OUT(ep)) { /* Check if OUT ep */
 		LOG_ERR("Not valid endpoint: %02x", ep);
 		return -EINVAL;
 	}
@@ -859,6 +859,12 @@ int usb_dc_ep_halt(const u8_t ep)
 
 int usb_dc_ep_flush(const u8_t ep)
 {
+	struct usb_dc_stm32_ep_state *ep_state = usb_dc_stm32_get_ep_state(ep);
+
+	if (!ep_state) {
+		return -EINVAL;
+	}
+
 	LOG_ERR("Not implemented");
 
 	return 0;
@@ -867,6 +873,10 @@ int usb_dc_ep_flush(const u8_t ep)
 int usb_dc_ep_mps(const u8_t ep)
 {
 	struct usb_dc_stm32_ep_state *ep_state = usb_dc_stm32_get_ep_state(ep);
+
+	if (!ep_state) {
+		return -EINVAL;
+	}
 
 	return ep_state->ep_mps;
 }
@@ -953,6 +963,8 @@ void HAL_PCD_SetupStageCallback(PCD_HandleTypeDef *hpcd)
 	LOG_DBG("");
 
 	ep_state = usb_dc_stm32_get_ep_state(EP0_OUT); /* can't fail for ep0 */
+	__ASSERT(ep_state, "No corresponding ep_state for EP0");
+
 	ep_state->read_count = SETUP_SIZE;
 	ep_state->read_offset = 0U;
 	memcpy(&usb_dc_stm32_state.ep_buf[EP0_IDX],
@@ -999,6 +1011,8 @@ void HAL_PCD_DataInStageCallback(PCD_HandleTypeDef *hpcd, u8_t epnum)
 
 	LOG_DBG("epnum 0x%02x", epnum);
 
+	__ASSERT(ep_state, "No corresponding ep_state for ep");
+
 	k_sem_give(&ep_state->write_sem);
 
 	if (ep_state->cb) {
@@ -1012,18 +1026,18 @@ void HAL_PCDEx_SetConnectionState(PCD_HandleTypeDef *hpcd, uint8_t state)
 	struct device *usb_disconnect;
 
 	usb_disconnect = device_get_binding(
-				DT_ST_STM32_USB_0_DISCONNECT_GPIOS_CONTROLLER);
+				DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_CONTROLLER);
 	gpio_pin_configure(usb_disconnect,
-			   DT_ST_STM32_USB_0_DISCONNECT_GPIOS_PIN, GPIO_DIR_OUT);
+			   DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_PIN, GPIO_DIR_OUT);
 
 	if (state) {
 		gpio_pin_write(usb_disconnect,
-			       DT_ST_STM32_USB_0_DISCONNECT_GPIOS_PIN,
-			       DT_ST_STM32_USB_0_DISCONNECT_GPIOS_FLAGS);
+			       DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_PIN,
+			       DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_FLAGS);
 	} else {
 		gpio_pin_write(usb_disconnect,
-			       DT_ST_STM32_USB_0_DISCONNECT_GPIOS_PIN,
-			       !DT_ST_STM32_USB_0_DISCONNECT_GPIOS_FLAGS);
+			       DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_PIN,
+			       !DT_INST_0_ST_STM32_USB_DISCONNECT_GPIOS_FLAGS);
 	}
 }
 #endif /* USB && CONFIG_USB_DC_STM32_DISCONN_ENABLE */

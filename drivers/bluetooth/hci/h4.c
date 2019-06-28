@@ -13,9 +13,9 @@
 #include <arch/cpu.h>
 
 #include <init.h>
-#include <uart.h>
-#include <misc/util.h>
-#include <misc/byteorder.h>
+#include <drivers/uart.h>
+#include <sys/util.h>
+#include <sys/byteorder.h>
 #include <string.h>
 
 #include <bluetooth/bluetooth.h>

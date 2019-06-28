@@ -163,7 +163,6 @@ Most everyday users will run with no arguments.
 """
 
 import os
-
 if os.name == 'nt':
     print("Running sanitycheck on Windows is not supported yet.")
     print("https://github.com/zephyrproject-rtos/zephyr/issues/2664")
@@ -568,7 +567,7 @@ class BinaryHandler(Handler):
                 generator_cmd = "ninja"
             else:
                 generator_cmd = "make"
-            command = [generator_cmd, "-C", self.outdir, "run"]
+            command = [generator_cmd, "run"]
         else:
             command = [self.binary]
 
@@ -580,8 +579,9 @@ class BinaryHandler(Handler):
                        ] + command
 
         verbose("Spawning process: " +
-                " ".join(shlex.quote(word) for word in command))
-        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as proc:
+                " ".join(shlex.quote(word) for word in command) + os.linesep +
+                "Spawning process in directory: " + self.outdir)
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self.outdir) as proc:
             verbose("Spawning BinaryHandler Thread for %s" % self.name)
             t = threading.Thread(target=self._output_reader, args=(proc, harness, ))
             t.start()
@@ -667,12 +667,23 @@ class DeviceHandler(Handler):
     def handle(self):
         out_state = "failed"
 
-        if options.ninja:
-            generator_cmd = "ninja"
+        if options.west_flash is not None:
+            command = ["west", "flash", "--skip-rebuild", "-d", self.outdir]
+            # There are two ways this option is used.
+            # 1) bare: --west-flash
+            #    This results in options.west_flash == []
+            # 2) with a value: --west-flash="--board-id=42"
+            #    This results in options.west_flash == "--board-id=42"
+            if options.west_flash != []:
+                command.append('--')
+                command.append(options.west_flash)
         else:
-            generator_cmd = "make"
+            if options.ninja:
+                generator_cmd = "ninja"
+            else:
+                generator_cmd = "make"
 
-        command = [generator_cmd, "-C", self.outdir, "flash"]
+            command = [generator_cmd, "-C", self.outdir, "flash"]
 
         device = options.device_serial
         ser = serial.Serial(
@@ -696,6 +707,7 @@ class DeviceHandler(Handler):
                              args=(ser, rpipe, harness))
         t.start()
 
+        logging.debug('Flash command: %s', command)
         try:
             if VERBOSE:
                 subprocess.check_call(command)
@@ -896,8 +908,8 @@ class SizeCalculator:
     # These get copied into RAM only on non-XIP
     ro_sections = ["text", "ctors", "init_array", "reset", "object_access",
                    "rodata", "devconfig", "net_l2", "vector", "sw_isr_table",
-                   "_bt_settings_area", "_bt_services_area", "vectors",
-                   "net_socket_register"]
+                   "_bt_settings_area", "_bt_channels_area","_bt_services_area",
+                   "vectors", "net_socket_register"]
 
     def __init__(self, filename, extra_sections):
         """Constructor
@@ -1052,8 +1064,13 @@ class MakeGoal:
             # Failure when calling the sub-make to build the code
             return self.build_log
         elif self.make_state == "running":
-            # Failure in sub-make for "make run", qemu probably failed to start
-            return self.run_log
+            # Failure in sub-make for "make run", qemu probably failed.
+            # Return qemu's output if there is one, otherwise make's.
+            h = Path(self.handler_log)
+            if h.exists() and h.stat().st_size > 0:
+                return self.handler_log
+            else:
+                return self.run_log
         elif self.make_state == "finished":
             # Execution handler finished, but timed out or otherwise wasn't successful
             return self.handler_log
@@ -1090,7 +1107,7 @@ class MakeGenerator:
 {goal}:
 """
 
-    MAKE_RULE_TMPL = """\t@echo sanity_test_{phase} {goal} >&2
+    MAKE_RULE_TMPL_CMAKE = """\t@echo sanity_test_{phase} {goal} >&2
 \tcmake  \\
 \t\t-G"{generator}"\\
 \t\t-H{directory}\\
@@ -1100,7 +1117,8 @@ class MakeGenerator:
 \t\t-DEXTRA_LDFLAGS="{ldflags}"\\
 \t\t{args}\\
 \t\t>{logfile} 2>&1
-\t{generator_cmd} -C {outdir}\\
+"""
+    MAKE_RULE_TMPL_BLD = """\t{generator_cmd} -C {outdir}\\
 \t\t{verb} {make_args}\\
 \t\t>>{logfile} 2>&1
 """
@@ -1169,20 +1187,30 @@ class MakeGenerator:
                 make_args=make_args
             )
         else:
-            return MakeGenerator.MAKE_RULE_TMPL.format(
+            cmake_rule = MakeGenerator.MAKE_RULE_TMPL_CMAKE.format(
                 generator=generator,
-                generator_cmd=generator_cmd,
                 phase=phase,
                 goal=name,
                 outdir=outdir,
                 cflags=cflags,
                 ldflags=ldflags,
                 directory=workdir,
-                verb=verb,
                 args=args,
                 logfile=logfile,
-                make_args=make_args
             )
+
+            if options.cmake_only:
+                build_rule = ""
+            else:
+                build_rule = MakeGenerator.MAKE_RULE_TMPL_BLD.format(
+                    generator_cmd=generator_cmd,
+                    outdir=outdir,
+                    verb=verb,
+                    make_args=make_args,
+                    logfile=logfile,
+                )
+
+            return cmake_rule + build_rule
 
     def _get_rule_footer(self, name):
         return MakeGenerator.GOAL_FOOTER_TMPL.format(goal=name)
@@ -1258,13 +1286,13 @@ class MakeGenerator:
             handler.pid_fn = os.path.join(instance.outdir, "renode.pid")
             handler.call_make_run = True
 
-
         if type == 'qemu':
             args.append("QEMU_PIPE=%s" % handler.get_fifo())
 
-        text = (self._get_rule_header(name) +
-                self._get_sub_make(name, "building", directory,
-                                   outdir, build_logfile, args, make_args=make_args))
+        text = self._get_rule_header(name)
+        if not options.test_only:
+            text += self._get_sub_make(name, "building", directory, outdir,
+                                       build_logfile, args, make_args=make_args)
         if handler and handler.run:
             text += self._get_sub_make(name, "running", directory,
                                    outdir, run_logfile,
@@ -1305,7 +1333,7 @@ class MakeGenerator:
         args.extend(extra_args)
 
         do_build_only = ti.build_only or options.build_only
-        do_run = not do_build_only
+        do_run = not do_build_only and not options.cmake_only
         skip_slow = ti.test.slow and not options.enable_slow
 
         # FIXME: Need refactoring and cleanup
@@ -1357,7 +1385,7 @@ class MakeGenerator:
 
             cmd = ["make", "-k", "-j", str(JOBS), "-f", tf.name, "all"]
 
-            # assure language neutral environemnt
+            # assure language neutral environment
             make_env = os.environ.copy()
             make_env['LC_MESSAGES'] = 'C.UTF-8'
             p = subprocess.Popen(cmd, stderr=subprocess.PIPE,
@@ -1390,7 +1418,7 @@ class MakeGenerator:
                     goal.make_state = state
 
                     if state == "finished":
-                        if goal.handler:
+                        if goal.handler and not options.cmake_only:
                             if hasattr(goal.handler, "handle"):
                                 goal.handler.handle()
                                 goal.handler_log = goal.handler.log
@@ -1712,7 +1740,7 @@ class TestCase:
     def get_unique(self, testcase_root, workdir, name):
 
         canonical_testcase_root = os.path.realpath(testcase_root)
-        if canonical_testcase_root.startswith(canonical_zephyr_base):
+        if Path(canonical_zephyr_base) in Path(canonical_testcase_root).parents:
             # This is in ZEPHYR_BASE, so include path in name for uniqueness
             # FIXME: We should not depend on path of test for unique names.
             relative_tc_root = os.path.relpath(canonical_testcase_root,
@@ -1826,7 +1854,7 @@ class TestInstance:
         self.outdir = os.path.join(base_outdir, platform.name, test.name)
 
         self.build_only = options.build_only or test.build_only \
-                or self.check_dependency()
+                or self.check_dependency() or options.cmake_only
         self.results = {}
 
     def __lt__(self, other):
@@ -2364,6 +2392,7 @@ class TestSuite:
                     case.create_overlay(case.platform.name)
 
         self.discards = discards
+
         return discards
 
     def add_instances(self, ti_list):
@@ -2390,7 +2419,7 @@ class TestSuite:
             mg.add_test_instance(i, options.extra_args)
         self.goals = mg.execute(cb, cb_context)
 
-        if not options.disable_size_report:
+        if not options.disable_size_report and not options.cmake_only:
             # Parallelize size calculation
             executor = concurrent.futures.ThreadPoolExecutor(JOBS)
             futures = [executor.submit(calc_one_elf_size, name, goal)
@@ -2400,6 +2429,7 @@ class TestSuite:
             for goal in self.goals.values():
                 goal.metrics["ram_size"] = 0
                 goal.metrics["rom_size"] = 0
+                goal.metrics["handler_time"] = 0
                 goal.metrics["unrecognized"] = []
 
         return self.goals
@@ -2782,6 +2812,12 @@ Artificially long but functional example:
     parser.add_argument("--list-tags", action="store_true",
             help="list all tags in selected tests")
 
+    parser.add_argument("--report-excluded",
+            action="store_true",
+            help="""List all tests that are never run based on current scope and
+            coverage. If you are looking for accurate results, run this with
+            --all, but this will take a while...""")
+
     case_select.add_argument("--list-tests", action="store_true",
         help="""List of all sub-test functions recursively found in
         all --testcase-root arguments. Note different sub-tests can share
@@ -2850,9 +2886,19 @@ Artificially long but functional example:
         action="store",
         help="Append list of tests and platforms to be run to file.")
 
-    parser.add_argument(
+    test_or_build = parser.add_mutually_exclusive_group()
+    test_or_build.add_argument(
         "-b", "--build-only", action="store_true",
         help="Only build the code, do not execute any of it in QEMU")
+    test_or_build.add_argument(
+        "--test-only", action="store_true",
+        help="""Only run device tests with current artifacts, do not build
+             the code""")
+    parser.add_argument(
+        "--cmake-only", action="store_true",
+        help="Test on device directly. Specify the serial device to "
+             "use with the --device-serial option.")
+
     parser.add_argument(
         "-j", "--jobs", type=int,
         help="Number of jobs for building, defaults to number of CPU threads "
@@ -2943,6 +2989,18 @@ Artificially long but functional example:
         "cmake -DUSE_CCACHE=0"
 
         which will ultimately disable ccache.
+        """
+    )
+    parser.add_argument(
+        "--west-flash", nargs='?', const=[],
+        help="""Uses west instead of ninja or make to flash when running with
+             --device-testing"
+
+        E.g
+         sanitycheck --device-testing --device-serial /dev/ttyACM0 \
+                     --west-flash="--board-id=foobar"
+        will translate to
+         west flash -- --board-id=foobar
         """
     )
     parser.add_argument("--gcov-tool", default="gcov",
@@ -3036,6 +3094,9 @@ def chatty_test_cb(instances, goals, goal):
 
     if goal.handler:
         handler_type = goal.handler.type_str
+        htime = goal.metrics.get("handler_time", None)
+        if htime:
+            handler_type += " {:.3f}s".format(htime)
     else:
         handler_type = "build"
 
@@ -3263,8 +3324,8 @@ def main():
     if options.test:
         run_individual_tests = options.test
 
-    if options.list_tests or options.sub_test:
-        cnt = 0
+
+    def get_unique_tests(ts):
         unq = []
         run_individual_tests = []
         for n,tc in ts.testcases.items():
@@ -3273,6 +3334,12 @@ def main():
                     if tc.name not in run_individual_tests:
                         run_individual_tests.append(tc.name)
                 unq.append(c)
+
+        return unq
+
+    if options.list_tests or options.sub_test:
+        cnt = 0
+        unq = get_unique_tests(ts)
 
         if options.sub_test:
             if run_individual_tests:
@@ -3297,6 +3364,7 @@ def main():
         ts.get_last_failed()
     else:
         discards = ts.apply_filters()
+
 
     if options.discard_report:
         ts.discard_report(options.discard_report)
@@ -3337,6 +3405,22 @@ def main():
 
     ts.instances = OrderedDict(sorted(ts.instances.items(),
                                key=cmp_to_key(native_and_unit_first)))
+
+
+
+    if options.report_excluded:
+        all_tests = set(get_unique_tests(ts))
+        to_be_run = set()
+        for i,p in ts.instances.items():
+            to_be_run.update(p.test.cases)
+
+        if (all_tests - to_be_run):
+            print("Tests that never build or run:")
+            for not_run in (all_tests - to_be_run):
+                print("- {}".format(not_run))
+
+        return
+
 
     if options.save_tests:
         ts.save_tests(options.save_tests)

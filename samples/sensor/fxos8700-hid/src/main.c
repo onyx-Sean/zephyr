@@ -7,7 +7,7 @@
  */
 #include <zephyr.h>
 #include <device.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 
 #include <usb/usb_device.h>
 #include <usb/class/usb_hid.h>
@@ -53,8 +53,8 @@ LOG_MODULE_REGISTER(main);
 #define LED		LED0_GPIO_PIN
 
 #ifdef CONFIG_FXOS8700
-#include <sensor.h>
-#define SENSOR_ACCEL_NAME DT_NXP_FXOS8700_0_LABEL
+#include <drivers/sensor.h>
+#define SENSOR_ACCEL_NAME DT_INST_0_NXP_FXOS8700_LABEL
 #endif
 
 static const u8_t hid_report_desc[] = HID_MOUSE_REPORT_DESC(2);

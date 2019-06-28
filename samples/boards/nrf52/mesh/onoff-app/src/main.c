@@ -36,12 +36,12 @@
  *
  */
 
-#include <misc/printk.h>
+#include <sys/printk.h>
 #include <settings/settings.h>
-#include <misc/byteorder.h>
+#include <sys/byteorder.h>
 #include <nrf.h>
 #include <device.h>
-#include <gpio.h>
+#include <drivers/gpio.h>
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/conn.h>
 #include <bluetooth/l2cap.h>

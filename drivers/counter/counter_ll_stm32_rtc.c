@@ -12,11 +12,11 @@
 #include <time.h>
 
 #include <clock_control/stm32_clock_control.h>
-#include <clock_control.h>
-#include <misc/util.h>
+#include <drivers/clock_control.h>
+#include <sys/util.h>
 #include <kernel.h>
 #include <soc.h>
-#include <counter.h>
+#include <drivers/counter.h>
 
 #include <logging/log.h>
 
@@ -197,17 +197,13 @@ static u32_t rtc_stm32_get_top_value(struct device *dev)
 }
 
 
-static int rtc_stm32_set_top_value(struct device *dev, u32_t ticks,
-				counter_top_callback_t callback,
-				void *user_data)
+static int rtc_stm32_set_top_value(struct device *dev,
+				   const struct counter_top_cfg *cfg)
 {
 	const struct counter_config_info *info = dev->config->config_info;
 
-	ARG_UNUSED(dev);
-	ARG_UNUSED(callback);
-	ARG_UNUSED(user_data);
-
-	if (ticks != info->max_top_value) {
+	if ((cfg->ticks != info->max_top_value) ||
+		!(cfg->flags & COUNTER_TOP_CFG_DONT_RESET)) {
 		return -ENOTSUP;
 	} else {
 		return 0;
@@ -269,8 +265,9 @@ static int rtc_stm32_init(struct device *dev)
 #if defined(CONFIG_COUNTER_RTC_STM32_CLOCK_LSI)
 
 	LL_RCC_LSI_Enable();
-	while (LL_RCC_LSI_IsReady() != 1)
-		;
+	while (LL_RCC_LSI_IsReady() != 1) {
+	}
+
 	LL_RCC_SetRTCClockSource(LL_RCC_RTC_CLKSOURCE_LSI);
 
 #else /* CONFIG_COUNTER_RTC_STM32_CLOCK_LSE */
@@ -286,8 +283,8 @@ static int rtc_stm32_init(struct device *dev)
 	LL_RCC_LSE_Enable();
 
 	/* Wait until LSE is ready */
-	while (LL_RCC_LSE_IsReady() != 1)
-		;
+	while (LL_RCC_LSE_IsReady() != 1) {
+	}
 
 	LL_RCC_SetRTCClockSource(LL_RCC_RTC_CLKSOURCE_LSE);
 
@@ -324,7 +321,7 @@ static const struct rtc_stm32_config rtc_config = {
 	.counter_info = {
 		.max_top_value = UINT32_MAX,
 		.freq = 1,
-		.count_up = true,
+		.flags = COUNTER_CONFIG_INFO_COUNT_UP,
 		.channels = 1,
 	},
 	.pclken = {

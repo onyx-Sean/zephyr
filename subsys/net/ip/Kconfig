@@ -304,6 +304,15 @@ config NET_UDP_CHECKSUM
 	  Enables UDP handler to check UDP checksum. If the checksum is invalid,
 	  then the packet is discarded.
 
+config NET_UDP_MISSING_CHECKSUM
+	bool "Accept missing checksum (IPv4 only)"
+	depends on NET_UDP && NET_IPV4
+	help
+	  RFC 768 states the possibility to have a missing checksum, for
+	  debugging purposes for instance. That feature is however valid only
+	  for IPv4 and on reception only, since Zephyr will always compute the
+	  UDP checksum in transmission path.
+
 if NET_UDP
 module = NET_UDP
 module-dep = NET_LOG
@@ -361,7 +370,7 @@ config NET_CONTEXT_PRIORITY
 	  also traffic class support to work as expected.
 
 config NET_CONTEXT_TIMESTAMP
-	bool "Add timepstamp support to net_context"
+	bool "Add timestamp support to net_context"
 	select NET_PKT_TIMESTAMP
 	help
 	  It is possible to timestamp outgoing packets.

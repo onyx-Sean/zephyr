@@ -6,8 +6,8 @@
 
 
 #include <init.h>
-#include <misc/byteorder.h>
-#include <misc/__assert.h>
+#include <sys/byteorder.h>
+#include <sys/__assert.h>
 #include <logging/log.h>
 
 #define LOG_LEVEL CONFIG_SENSOR_LOG_LEVEL
@@ -367,6 +367,6 @@ int lis2dh_init(struct device *dev)
 
 static struct lis2dh_data lis2dh_driver;
 
-DEVICE_AND_API_INIT(lis2dh, DT_ST_LIS2DH_0_LABEL, lis2dh_init, &lis2dh_driver,
+DEVICE_AND_API_INIT(lis2dh, DT_INST_0_ST_LIS2DH_LABEL, lis2dh_init, &lis2dh_driver,
 		    NULL, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &lis2dh_driver_api);
